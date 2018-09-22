@@ -13,8 +13,7 @@ class Post(models.Model):
         )
 
     title = models.CharField(
-        max_length=255,
-        default='',
+        max_length=100,
         )
 
     text = models.TextField()
