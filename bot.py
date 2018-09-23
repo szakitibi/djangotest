@@ -1,9 +1,12 @@
 from pyhunter import PyHunter
+from requests.exceptions import ConnectionError
+import clearbit
 import configparser
 import lorem
 import random
 import requests
 import string
+import time
 
 ALPHANUM = string.ascii_letters+string.digits
 
@@ -113,6 +116,10 @@ class BigHero6(object):
             config['domain_to_search'], limit=self.number_of_users)
         self.emails = [email['value'] for email in results['emails']]
 
+        # setup clearbit
+        clearbit.key = config['clearbit_secret_key']
+        self.clearbit_find = clearbit.Enrichment.find
+
         # create session
         self.session = requests.Session()
         self.session.headers.update({
@@ -129,7 +136,7 @@ class BigHero6(object):
         """
         if not credentials:
             credentials = self.bot_credentials
-        response = self.session.post(self.auth_token_url, json=credentials)
+        response = self.safe_request(self.session.post, self.auth_token_url, json=credentials)
         if response.status_code != 200:
             raise ValueError("Invalid credentials!")
         token = response.json()['token']
@@ -142,7 +149,7 @@ class BigHero6(object):
         for user in users:
             if user['is_superuser']:
                 continue
-            self.session.delete(self.users_url+'%s/' % user['id'])
+            self.safe_request(self.session.delete, self.users_url+'%s/' % user['id'])
 
     def create_user(self, userdata):
         """ Creates user based on input userdata.
@@ -158,7 +165,7 @@ class BigHero6(object):
             :rtype:   dict
         """
 
-        response = self.session.post(self.users_url, json=userdata)
+        response = self.safe_request(self.session.post, self.users_url, json=userdata)
         if response.status_code != 201:
             raise ValueError("User creation failed! %s" % response.text)
         return response.json()
@@ -170,7 +177,7 @@ class BigHero6(object):
             :rtype:   list
         """
 
-        response = self.session.get(self.users_url)
+        response = self.safe_request(self.session.get, self.users_url)
         return response.json()
 
     def create_post(self):
@@ -180,7 +187,7 @@ class BigHero6(object):
             title=lorem.sentence(),
             text=lorem.paragraph(),
             )
-        response = self.session.post(self.posts_url, json=postdata)
+        response = self.safe_request(self.session.post, self.posts_url, json=postdata)
         if response.status_code != 201:
             raise ValueError("Post creation failed! %s" % response.text)
         return response.json()
@@ -192,7 +199,7 @@ class BigHero6(object):
             :rtype:   list
         """
 
-        response = self.session.get(self.posts_url)
+        response = self.safe_request(self.session.get, self.posts_url)
         return response.json()
 
     def like_post(self, post_id):
@@ -202,7 +209,7 @@ class BigHero6(object):
             :params ptype:   int
         """
 
-        response = self.session.post(self.posts_url+'%d/like/' % post_id)
+        response = self.safe_request(self.session.post, self.posts_url+'%d/like/' % post_id)
         if response.status_code != 200:
             raise ValueError("Post like failed! %s" % response.text)
 
@@ -221,18 +228,41 @@ class BigHero6(object):
         """
 
         username = email.split('@')[0]
+        # not all emails return a response with person data
+        # (e.g: "Could not find any data for craig.morris@microsoft.com")
+        # so we go fail safe on fetching names
+        response = self.clearbit_find(email=email, stream=True)
+        person = response['person'] if 'person' in response.keys() else None
+        name = person['name'] if person else None
+        first_name = name['givenName'] if name else ''
+        last_name = name['familyName'] if name else ''
         userdata = dict(
             username=username,
             password=''.join(random.sample(ALPHANUM, 8)),
             email=email,
-            # TODO:
-            #   Although hunter response has first and last name
-            #   show case for enrichment will be done with clearbit.
-            #   For first version generate it.
-            first_name=username.split('.')[0].capitalize(),
-            last_name=username.split('.')[-1].capitalize(),
+            first_name=first_name,
+            last_name=last_name,
             )
         return userdata
+
+    def safe_request(self, request_method, *args, **kw):
+        """ For some unknown reason requests randomly produce:
+
+            `requests.exceptions.ConnectionError: ('Connection aborted.', BadStatusLine("''",))`
+
+            Based on traceback I did debug it in place at
+            http.client.py line #350 where it gets empty response.
+            My best guess is Django failing to handle quick requests
+            (at least on my machine) because giving it a bit of time
+            and resending the same request seems to fix it.
+        """
+
+        try:
+            response = request_method(*args, **kw)
+        except ConnectionError:
+            time.sleep(0.1)
+            response = request_method(*args, **kw)
+        return response
 
 if __name__ == '__main__':
     run()
