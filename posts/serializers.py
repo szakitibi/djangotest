@@ -12,9 +12,11 @@ class UserSerializer(serializers.HyperlinkedModelSerializer):
                   'password',
                   'email',
                   'first_name',
-                  'last_name')
+                  'last_name',
+                  'is_superuser')
 
     def create(self, validated_data):
+        validated_data['is_superuser'] = 0  # no createsuperusers over REST
         user = User.objects.create_user(**validated_data)
         return user
 

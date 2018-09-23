@@ -1,0 +1,15 @@
+certifi==2018.8.24
+chardet==3.0.4
+Django==2.0.8
+django-rest-auth==0.9.3
+djangorestframework==3.8.0
+djangorestframework-jwt==1.11.0
+email_hunter_python==1.1.0 
+idna==2.7
+lorem==0.1.1
+mysqlclient==1.3.13
+PyJWT==1.6.4
+pytz==2018.5
+requests==2.19.1
+six==1.11.0
+urllib3==1.23
