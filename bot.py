@@ -1,7 +1,11 @@
+from pyhunter import PyHunter
 import configparser
 import lorem
 import random
 import requests
+import string
+
+ALPHANUM = string.ascii_letters+string.digits
 
 
 def run():
@@ -14,21 +18,11 @@ def run():
     bot.login()
     bot.clean_up()
     users = dict()
-    for i in range(bot.number_of_users):
-        userdata = dict(
-            username='user%d' % i,
-            password='5ecretPW%d' % i,
-            #   email='user%s@te.st',
-            #   first_name='Dummy',
-            #   last_name='User',
-            #
-            # TODO:
-            #   - get emails with emailhunter
-            #   - get first and last name with clearbit
-            )
+    for email in bot.emails:
+        userdata = bot.get_userdata_for_email(email)
         response = bot.create_user(userdata)
         users[response['id']] = userdata
-        print('\r'+'.'*i, end='')
+        print('\r'+'.'*bot.emails.index(email), end='')
 
     # make random posts for each user
     print('\nCreating posts.')
@@ -40,6 +34,7 @@ def run():
             post = bot.create_post()
             user['posts'].append(post['id'])
         print('\r'+'.'*i, end='')
+    print('\n')
 
     # since no post have likes yet, get all posts
     posts_with_no_likes = bot.get_posts()
@@ -111,6 +106,12 @@ class BigHero6(object):
         self.number_of_users = int(config['number_of_users'])
         self.max_posts_per_user = int(config['max_posts_per_user'])
         self.max_likes_per_user = int(config['max_likes_per_user'])
+
+        # query the required number of emails from `hunter.io`
+        self.hunter = PyHunter(config['email_hunter_key'])
+        results = self.hunter.domain_search(
+            config['domain_to_search'], limit=self.number_of_users)
+        self.emails = [email['value'] for email in results['emails']]
 
         # create session
         self.session = requests.Session()
@@ -205,6 +206,33 @@ class BigHero6(object):
         if response.status_code != 200:
             raise ValueError("Post like failed! %s" % response.text)
 
+    def get_userdata_for_email(self, email):
+        """ Returns full userdata dicitonary for input email.
+
+            :params email: An email.
+            :ptype: str
+
+            :returns: User information ready to be used for user creation.
+            :rtype:   dict -> keys ['username',
+                                    'password',
+                                    'email',
+                                    'first_name',
+                                    'last_name', ]
+        """
+
+        username = email.split('@')[0]
+        userdata = dict(
+            username=username,
+            password=''.join(random.sample(ALPHANUM, 8)),
+            email=email,
+            # TODO:
+            #   Although hunter response has first and last name
+            #   show case for enrichment will be done with clearbit.
+            #   For first version generate it.
+            first_name=username.split('.')[0].capitalize(),
+            last_name=username.split('.')[-1].capitalize(),
+            )
+        return userdata
 
 if __name__ == '__main__':
     run()
