@@ -3,7 +3,7 @@ chardet==3.0.4
 clearbit==0.1.7
 Django==2.0.8
 django-rest-auth==0.9.3
-djangorestframework==3.8.0
+djangorestframework==3.9.1
 djangorestframework-jwt==1.11.0
 pyhunter==0.3 
 idna==2.7
